@@ -1,0 +1,9 @@
+2025-03-14 23:38:01 - Inicio del proceso de envío de correo.
+2025-03-14 23:38:01 - Autenticando con OAuth2.
+2025-03-14 23:38:01 - Autenticación exitosa.
+2025-03-14 23:38:01 - Destinatarios agregados: ktchubinsky@alamoar.com.ar
+2025-03-14 23:38:01 - CC agregado: ktchubinsky@gmail.com
+2025-03-14 23:38:01 - CCO agregado: ktchubinsky@alamoar.com.ar
+2025-03-14 23:38:01 - ADVERTENCIA: El archivo no existe y no será adjuntado: C:\Uers\ktchu\Desktop\PRE_NOASA_IntegracionMasPedidosCuentaCorrienteYPedidosPendientes.pdf
+2025-03-14 23:38:01 - Archivo adjunto agregado: H:\Mi unidad\MetroEnergia\JOBS METRO\JOBS VIGENTES (MENOS SAP_HIS).jpg
+2025-03-14 23:38:03 - Correo enviado exitosamente.

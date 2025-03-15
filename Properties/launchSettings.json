@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "AlamoGmailSender": {
+      "commandName": "Project",
+      "commandLineArgs": "\"ktchubinsky@alamoar.com.ar\" \"ktchubinsky@alamoar.com.ar\" \"ktchubinsky@gmail.com\" \"ktchubinsky@alamoar.com.ar\" \"C:\\Users\\ktchu\\Desktop\\PRE_NOASA_IntegracionMasPedidosCuentaCorrienteYPedidosPendientes.pdf;H:\\Mi unidad\\MetroEnergia\\JOBS METRO\\JOBS VIGENTES (MENOS SAP_HIS).jpg\" \"Mail de prueba\" \"<p>body de prueba</p>\" \"C:\\Users\\ktchu\\source\\repos\\AlamoGmailSender\\bin\\Debug\\net7.0\\log.txt\""
+    }
+  }
+}
