@@ -4,7 +4,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Linq;
-using System.Reflection; // Para obtener la ruta del ejecutable
+using System.Reflection;
 using Google.Apis.Auth.OAuth2;
 using Google.Apis.Gmail.v1;
 using Google.Apis.Gmail.v1.Data;
@@ -23,12 +23,7 @@ class Program
             return;
         }
 
-        // Obtener la carpeta donde se encuentra el ejecutable (.exe)
         string exeDirectory = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
-
-        // Definir rutas absolutas para credentials.json y token.json en la misma carpeta que el ejecutable
-        string credentialPath = Path.Combine(exeDirectory, "credentials.json");
-        string tokenPath = Path.Combine(exeDirectory, "token.json");
 
         string origenRaw = args[0];
         string destinosRaw = args[1];
@@ -39,41 +34,74 @@ class Program
         string cuerpoHtml = args[6];
         string archivoLog = args[7];
 
+        string emailOrigen, nombreOrigen = "", dominio;
+
+        // Intentar matchear formato "Nombre <correo@dominio>"
+        var match = System.Text.RegularExpressions.Regex.Match(origenRaw, @"^(.*)\s*<(.+@(.+))>$");
+
+        if (match.Success)
+        {
+            nombreOrigen = match.Groups[1].Value.Trim();
+            emailOrigen = match.Groups[2].Value.Trim();
+            dominio = match.Groups[3].Value.Trim().ToLower();
+        }
+        else
+        {
+            // Formato simple: correo@dominio
+            emailOrigen = origenRaw.Trim();
+            var emailParts = emailOrigen.Split('@');
+            dominio = emailParts.Length == 2 ? emailParts[1].ToLower() : "default";
+        }
+
+        // Ruta esperada del archivo de credenciales
+        string archivoCredenciales = Path.Combine(exeDirectory, $"credentials_{dominio}.json");
+
+        // Ruta para token por mail de origen
+        string tokenDirectory = Path.Combine(exeDirectory, $"token_{emailOrigen}");
+
         try
         {
             Log(archivoLog, "Inicio del proceso de envío de correo.");
 
-            if (!File.Exists(credentialPath))
+            if (!File.Exists(archivoCredenciales))
             {
-                Log(archivoLog, $"No se encontró el archivo credentials.json en la ruta: {credentialPath}");
+                Log(archivoLog, $"No se encontró el archivo: {archivoCredenciales}");
+                return;
             }
 
-            Log(archivoLog, "Autenticando con OAuth2.");
+            Log(archivoLog, $"Autenticando con OAuth2 usando: {archivoCredenciales}");
             UserCredential credential;
-            using (var stream = new FileStream(credentialPath, FileMode.Open, FileAccess.Read))
+            try
             {
-                credential = await GoogleWebAuthorizationBroker.AuthorizeAsync(
-                    GoogleClientSecrets.FromStream(stream).Secrets,
-                    new[] { GmailService.Scope.MailGoogleCom },
-                    "user",
-                    CancellationToken.None,
-                    new FileDataStore(tokenPath, true) // Guarda el token en la misma carpeta que el .exe
-                );
+                using (var stream = new FileStream(archivoCredenciales, FileMode.Open, FileAccess.Read))
+                {
+                    credential = await GoogleWebAuthorizationBroker.AuthorizeAsync(
+                        GoogleClientSecrets.FromStream(stream).Secrets,
+                        new[] { GmailService.Scope.MailGoogleCom },
+                        "user",
+                        CancellationToken.None,
+                        new FileDataStore(tokenDirectory, true)
+                    );
+                }
+            }
+            catch (Exception authEx)
+            {
+                Log(archivoLog, $"ERROR en autenticación: {authEx.Message}");
+                if (Directory.Exists(tokenDirectory))
+                {
+                    Log(archivoLog, $"Eliminando directorio de token corrupto: {tokenDirectory}");
+                    Directory.Delete(tokenDirectory, true);
+                }
+                return;
             }
 
             Log(archivoLog, "Autenticación exitosa.");
 
-            // Crear el servicio de Gmail
             var service = new GmailService(new BaseClientService.Initializer
             {
                 HttpClientInitializer = credential,
                 ApplicationName = "Gmail API C#"
             });
-
-            // **PARSEAR EL ORIGEN** (Soporta "Nombre <correo@dominio.com>")
-            var match = System.Text.RegularExpressions.Regex.Match(origenRaw, @"^(.*)\s*<(.+@.+)>$");
-            string nombreOrigen = match.Success ? match.Groups[1].Value.Trim() : "";
-            string emailOrigen = match.Success ? match.Groups[2].Value.Trim() : origenRaw;
 
             var message = new MimeMessage();
             if (!string.IsNullOrWhiteSpace(nombreOrigen))
@@ -81,39 +109,30 @@ class Program
             else
                 message.From.Add(new MailboxAddress(emailOrigen, emailOrigen));
 
-            // **AGREGAR DESTINATARIOS**
             var destinosList = destinosRaw.Split(';').Select(e => e.Trim()).Where(e => !string.IsNullOrWhiteSpace(e)).ToList();
             foreach (var destino in destinosList)
                 message.To.Add(new MailboxAddress("", destino));
-
             Log(archivoLog, $"Destinatarios agregados: {string.Join(", ", destinosList)}");
 
-            // **AGREGAR CC**
             if (!string.IsNullOrWhiteSpace(ccRaw))
             {
                 var ccList = ccRaw.Split(';').Select(e => e.Trim()).Where(e => !string.IsNullOrWhiteSpace(e)).ToList();
                 foreach (var cc in ccList)
                     message.Cc.Add(new MailboxAddress("", cc));
-
                 Log(archivoLog, $"CC agregado: {string.Join(", ", ccList)}");
             }
 
-            // **AGREGAR CCO**
             if (!string.IsNullOrWhiteSpace(ccoRaw))
             {
                 var ccoList = ccoRaw.Split(';').Select(e => e.Trim()).Where(e => !string.IsNullOrWhiteSpace(e)).ToList();
                 foreach (var cco in ccoList)
                     message.Bcc.Add(new MailboxAddress("", cco));
-
                 Log(archivoLog, $"CCO agregado: {string.Join(", ", ccoList)}");
             }
 
             message.Subject = asunto;
-
-            // **CREAR EL CUERPO DEL MENSAJE (HTML)**
             var bodyBuilder = new BodyBuilder { HtmlBody = cuerpoHtml };
 
-            // **AGREGAR ARCHIVOS ADJUNTOS**
             if (!string.IsNullOrWhiteSpace(archivosAdjuntosRaw))
             {
                 var archivosAdjuntos = archivosAdjuntosRaw.Split(';').Select(a => a.Trim()).Where(a => !string.IsNullOrWhiteSpace(a)).ToList();
@@ -137,7 +156,6 @@ class Program
 
             message.Body = bodyBuilder.ToMessageBody();
 
-            // **CONVERTIR EL MENSAJE A BASE64 URL-SAFE**
             using (var memoryStream = new MemoryStream())
             {
                 message.WriteTo(memoryStream);
@@ -146,7 +164,6 @@ class Program
                     .Replace("/", "_")
                     .Replace("=", "");
 
-                // **ENVIAR EL CORREO**
                 var gmailMessage = new Message { Raw = rawMessage };
                 await service.Users.Messages.Send(gmailMessage, "me").ExecuteAsync();
             }
